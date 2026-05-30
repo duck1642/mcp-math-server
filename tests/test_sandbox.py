@@ -6,7 +6,7 @@ Asserts that standard mathematical computations succeed while exploits are block
 
 import pytest
 from core.sandbox import run_sandboxed, validate_expression
-from core.errors import SandboxSecurityError
+from core.errors import SandboxSecurityError, MathSyntaxError
 
 def test_safe_mathematical_expressions():
     """Asserts that basic, safe mathematical expressions evaluate correctly."""
@@ -50,10 +50,10 @@ def test_malicious_builtins_rejection():
 
 def test_syntax_and_assignment_rejection():
     """Asserts that variable assignments and multi-line statements throw errors."""
-    with pytest.raises(SandboxSecurityError):
+    with pytest.raises(MathSyntaxError):
         run_sandboxed("x = 5")
 
-    with pytest.raises(SandboxSecurityError):
+    with pytest.raises(MathSyntaxError):
         run_sandboxed("1 + 1; 2 + 2")
 
 
@@ -64,3 +64,29 @@ def test_execution_timeout():
         # A calculation that takes very long in SymPy
         run_sandboxed("sp.factorial(1000000)", timeout=0.1)
     assert "timed out" in str(exc_info.value)
+
+
+def test_error_taxonomy_regression():
+    """Regression tests for separating syntax errors from security/sandbox violations."""
+    # 1. "x***2" → MathSyntaxError
+    with pytest.raises(MathSyntaxError) as exc_info:
+        run_sandboxed("x***2")
+    assert "Syntax error in mathematical expression" in str(exc_info.value)
+
+    # 2. "__import__" → SandboxSecurityError
+    with pytest.raises(SandboxSecurityError) as exc_info:
+        run_sandboxed("__import__")
+    assert "Access to private variable or method" in str(exc_info.value) or "forbidden" in str(exc_info.value)
+
+    # 3. "x.__class__" → SandboxSecurityError
+    with pytest.raises(SandboxSecurityError) as exc_info:
+        run_sandboxed("x.__class__")
+    assert "Access to private attribute" in str(exc_info.value)
+
+    # 4. "globals()" → SandboxSecurityError
+    with pytest.raises(SandboxSecurityError) as exc_info:
+        run_sandboxed("globals()")
+    assert "Use of built-in function" in str(exc_info.value)
+
+    # 5. "sin(x)" → success (with namespace value)
+    assert float(run_sandboxed("sin(x)", local_dict={"x": 0.0})) == 0.0

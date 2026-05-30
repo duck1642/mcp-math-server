@@ -8,7 +8,7 @@ import ast
 import builtins
 import concurrent.futures
 from typing import Any, Dict, Optional
-from core.errors import SandboxSecurityError
+from core.errors import SandboxSecurityError, MathSyntaxError
 from core.namespace import SCIENCE_NAMESPACE
 
 class SafeASTValidator(ast.NodeVisitor):
@@ -136,7 +136,7 @@ def validate_expression(expression: str) -> ast.Expression:
         # Compile in eval mode to prevent statements, imports, or assignments
         tree = ast.parse(clean_expr, mode="eval")
     except SyntaxError as e:
-        raise SandboxSecurityError(f"Syntax error in mathematical expression: {e}")
+        raise MathSyntaxError(f"Syntax error in mathematical expression: {e}")
         
     validator = SafeASTValidator()
     validator.visit(tree)

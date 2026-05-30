@@ -10,7 +10,7 @@ import scipy.optimize
 import scipy.integrate
 import sympy as sp
 
-from core.errors import MathEvaluationError, format_error
+from core.errors import MathEvaluationError, format_error, DivergentIntegralError
 from core.sandbox import run_sandboxed
 from core.units import parse_substitutions, parse_quantity, ureg
 
@@ -198,16 +198,98 @@ def solve_numeric_tool(
             ast_obj = run_sandboxed(expr_list[0], local_dict=local_dict)
             substituted_sym = sp.sympify(ast_obj).subs(subs_parsed)
             
-            compiled_integrand = sp.lambdify(var_sym, substituted_sym, modules=["numpy", "math"])
+            # Try symbolic definite integration first to resolve improper integrals exactly
+            val = None
+            err = 0.0
+            convergent = True
             
-            # Resolve definite integrals using Scipy quad
-            val, err = scipy.integrate.quad(compiled_integrand, float(bounds[0]), float(bounds[1]))
-            
+            # Helper to map string infinity bounds to actual SymPy infinity objects
+            def parse_sp_bound(b):
+                if isinstance(b, str):
+                    clean_b = b.strip().lower()
+                    if clean_b in ("inf", "+inf", "oo", "+oo"):
+                        return sp.oo
+                    if clean_b in ("-inf", "-oo"):
+                        return -sp.oo
+                return sp.sympify(b)
+                
+            try:
+                # Convert bounds to SymPy expressions
+                sp_lower = parse_sp_bound(bounds[0])
+                sp_upper = parse_sp_bound(bounds[1])
+                
+                sym_res = sp.integrate(substituted_sym, (var_sym, sp_lower, sp_upper))
+                
+                # Check for explicit divergence
+                if sym_res == sp.oo or sym_res == -sp.oo or sym_res.has(sp.oo) or sym_res.has(-sp.oo):
+                    raise DivergentIntegralError("Improper integral diverges.")
+                    
+                if sym_res.is_number and not isinstance(sym_res, sp.Integral):
+                    val = float(sym_res)
+                    err = 0.0
+                    convergent = True
+            except DivergentIntegralError as die:
+                raise die
+            except Exception:
+                # Fallback to numerical integration if symbolic integration is not available
+                val = None
+                
+            if val is None:
+                import warnings
+                from scipy.integrate import IntegrationWarning
+                
+                # Map standard string oo/inf names to float infinity for SciPy
+                def parse_bound(b):
+                    if isinstance(b, str):
+                        clean_b = b.strip().lower()
+                        if clean_b in ("oo", "inf", "+oo", "+inf"):
+                            return float("inf")
+                        if clean_b in ("-oo", "-inf"):
+                            return float("-inf")
+                    return float(b)
+                    
+                lower_f = parse_bound(bounds[0])
+                upper_f = parse_bound(bounds[1])
+                
+                compiled_integrand = sp.lambdify(var_sym, substituted_sym, modules=["numpy", "math"])
+                
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    warnings.simplefilter("always", IntegrationWarning)
+                    try:
+                        val, err = scipy.integrate.quad(compiled_integrand, lower_f, upper_f)
+                    except Exception as e:
+                        raise DivergentIntegralError(f"Numerical integration failed: {e}")
+                        
+                # Check for SciPy divergence warning triggers
+                if caught_warnings:
+                    warn_msg = str(caught_warnings[0].message)
+                    raise DivergentIntegralError(
+                        f"Numerical integration failed to converge: {warn_msg}",
+                        suggestion="Check if the integral diverges mathematically or has interior singularities."
+                    )
+                    
+                # Classify convergence based on estimated relative error bounds
+                if val != 0:
+                    rel_err = abs(err / val)
+                    if rel_err > 1e-2 and abs(err) > 1e-3:
+                        raise DivergentIntegralError(
+                            f"Numerical integration failed to converge. Estimated absolute error: {err}, relative error: {rel_err:.4f}",
+                            suggestion="Check for slow convergence or potential mathematical divergence."
+                        )
+                elif abs(err) > 1e-3:
+                    raise DivergentIntegralError(
+                        f"Numerical integration failed to converge. Result is zero but estimated absolute error is unacceptably high ({err}).",
+                        suggestion="Check if the integral converges mathematically."
+                    )
+                    
+                convergent = True
+
             return {
                 "status": "success",
                 "method": "integrate",
                 "value": val,
                 "absolute_error": err,
+                "convergent": convergent,
                 "bounds": bounds
             }
             

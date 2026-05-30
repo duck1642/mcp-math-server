@@ -36,6 +36,25 @@ class MathEvaluationError(MathServerException):
     def __init__(self, message, suggestion=None):
         super().__init__(message, suggestion)
 
+class MathSyntaxError(MathServerException):
+    """Raised when a mathematical expression is syntactically invalid."""
+    def __init__(self, message, suggestion=None):
+        default_suggestion = (
+            "Review the mathematical operator formatting. "
+            "Ensure standard mathematical operators (*, /, +, -, **) are correctly placed "
+            "and all parenthesis or brackets are fully closed."
+        )
+        super().__init__(message, suggestion or default_suggestion)
+
+class DivergentIntegralError(MathServerException):
+    """Raised when a numerical or symbolic integral diverges or fails to converge."""
+    def __init__(self, message, suggestion=None):
+        default_suggestion = (
+            "Check the integration boundaries and the behavior of the integrand at the bounds "
+            "or singularities. Ensure the improper integral converges mathematically."
+        )
+        super().__init__(message, suggestion or default_suggestion)
+
 def format_error(error: Exception, debug: bool = False) -> dict:
     """
     Serializes an exception into a clean, structured JSON response dictionary.

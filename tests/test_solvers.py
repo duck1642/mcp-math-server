@@ -63,6 +63,50 @@ def test_numerical_definite_integration():
     res = solve_numeric_tool("integrate", expression="x**2", variable="x", bounds=[0, 3])
     assert res["status"] == "success"
     assert abs(res["value"] - 9.0) < 1e-5
+    assert res["convergent"] is True
+
+
+def test_definite_integration_convergence_regression():
+    """Asserts definite integration convergence/divergence behaves correctly on improper integrals."""
+    # 1. ∫₁^∞ 1/x dx → diverges
+    res1 = solve_numeric_tool("integrate", expression="1/x", variable="x", bounds=[1, "inf"])
+    assert res1["status"] == "error"
+    assert res1["type"] == "DivergentIntegralError"
+
+    # 2. ∫₁^∞ 1/x² dx → 1
+    res2 = solve_numeric_tool("integrate", expression="1/x**2", variable="x", bounds=[1, "inf"])
+    assert res2["status"] == "success"
+    assert pytest.approx(res2["value"]) == 1.0
+    assert res2["convergent"] is True
+
+    # 3. ∫₀^∞ e^(-x) dx → 1
+    res3 = solve_numeric_tool("integrate", expression="exp(-x)", variable="x", bounds=[0, "inf"])
+    assert res3["status"] == "success"
+    assert pytest.approx(res3["value"]) == 1.0
+    assert res3["convergent"] is True
+
+    # 4. ∫₀^∞ sin(x)/x dx → π/2
+    res4 = solve_numeric_tool("integrate", expression="sin(x)/x", variable="x", bounds=[0, "inf"])
+    assert res4["status"] == "success"
+    assert pytest.approx(res4["value"]) == 1.5707963267948966
+    assert res4["convergent"] is True
+
+    # 5. ∫₀¹ 1/sqrt(x) dx → 2
+    res5 = solve_numeric_tool("integrate", expression="1/sqrt(x)", variable="x", bounds=[0, 1])
+    assert res5["status"] == "success"
+    assert pytest.approx(res5["value"]) == 2.0
+    assert res5["convergent"] is True
+
+    # 6. ∫₀¹ 1/x dx → diverges
+    res6 = solve_numeric_tool("integrate", expression="1/x", variable="x", bounds=[0, 1])
+    assert res6["status"] == "error"
+    assert res6["type"] == "DivergentIntegralError"
+
+    # 7. ∫₋∞^∞ e^(-x²) dx → √π
+    res7 = solve_numeric_tool("integrate", expression="exp(-x**2)", variable="x", bounds=["-inf", "inf"])
+    assert res7["status"] == "success"
+    assert pytest.approx(res7["value"]) == 1.772453850905516
+    assert res7["convergent"] is True
 
 
 def test_dynamical_ode_systems():

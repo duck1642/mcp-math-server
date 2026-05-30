@@ -24,10 +24,22 @@ def parse_quantity(value: Any) -> Quantity:
         return ureg.Quantity(value)
         
     if isinstance(value, str):
+        val_str = value.strip()
         try:
             # Explicitly parse string to prevent local encoding issues
-            return ureg.Quantity(value.strip())
-        except (UndefinedUnitError, ValueError, TypeError) as e:
+            return ureg.Quantity(val_str)
+        except Exception as e:
+            # Catch offset unit calculus or other parsing errors and try regex fallback
+            import re
+            match = re.match(r'^\s*([+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)\s*(.+)$', val_str)
+            if match:
+                num_str, unit_str = match.groups()
+                try:
+                    num_val = float(num_str) if '.' in num_str or 'e' in num_str.lower() else int(num_str)
+                    return ureg.Quantity(num_val, unit_str)
+                except Exception:
+                    pass
+            
             raise UnitMismatchError(
                 f"Failed to parse unit string '{value}': {e}",
                 suggestion="Ensure unit symbols are standard Pint notation (e.g. 'N', 'Pa', 'm/s^2', 'kg')."
@@ -181,7 +193,12 @@ def format_result(
     else:
         unit_obj = ureg.dimensionless
 
-    base_quantity = ureg.Quantity(magnitude, unit_obj)
+    # Construct the quantity using the base SI units of unit_obj
+    if unit_obj != ureg.dimensionless:
+        base_si_unit = ureg.Quantity(1, unit_obj).to_base_units().units
+        base_quantity = ureg.Quantity(magnitude, base_si_unit)
+    else:
+        base_quantity = ureg.Quantity(magnitude)
 
     # 2. Check if a specific target output unit is requested
     if output_unit_str:
@@ -194,8 +211,22 @@ def format_result(
                 suggestion="Specify output units with matching dimensional metrics (e.g. converting Joule to kJ is valid)."
             )
     else:
-        # Default to standard base unit reduction or base SI
-        formatted_quantity = base_quantity.to_compact() if not base_quantity.dimensionless else base_quantity
+        if unit_obj != ureg.dimensionless:
+            # First convert the base quantity back to the original unit (e.g. millimeter or degree_Celsius)
+            q_orig = base_quantity.to(unit_obj)
+            
+            # Check if the unit_obj is a base unit of its dimension (base scaling factor is 1.0)
+            try:
+                is_base_unit = abs(ureg.Quantity(1, unit_obj).to_base_units().magnitude - 1.0) < 1e-9
+            except Exception:
+                is_base_unit = False
+
+            if is_base_unit:
+                formatted_quantity = q_orig.to_compact()
+            else:
+                formatted_quantity = q_orig
+        else:
+            formatted_quantity = base_quantity
 
     # 3. Format strings strictly in plain ASCII notation to guarantee safety against Windows encoding bugs
     # format "{:~}" gives plain ASCII units like "m / s ** 2", "kg * m / s ** 2"

@@ -78,3 +78,67 @@ def test_format_result():
     assert res_target["value"] == 1.0
     assert res_target["unit"] == "kJ"
     assert "1.0 kJ" in res_target["result_pretty"]
+
+
+def test_metric_prefix_double_scaling_regression():
+    """Asserts that input units with metric prefixes are not scaled twice during calculations."""
+    # 1. 1 mm (evaluated as 0.001 m in SI calculations) should format back to 1.0 mm (not 1e-6 m)
+    res_mm = format_result(0.001, ureg.Quantity(1, ureg.millimeter))
+    assert res_mm["value"] == 1.0
+    assert res_mm["unit"] == "mm"
+    assert "1.0 mm" in res_mm["result_pretty"]
+    assert "0.001 m" in res_mm["result_si"]
+
+    # 2. 1 cm (evaluated as 0.01 m in SI calculations) should format back to 1.0 cm (not 0.0001 m)
+    res_cm = format_result(0.01, ureg.Quantity(1, ureg.centimeter))
+    assert res_cm["value"] == 1.0
+    assert res_cm["unit"] == "cm"
+    assert "1.0 cm" in res_cm["result_pretty"]
+    assert "0.01 m" in res_cm["result_si"]
+
+    # 3. 1234 mm (evaluated as 1.234 m in SI calculations) should format back to 1234.0 mm
+    res_1234 = format_result(1.234, ureg.Quantity(1234, ureg.millimeter))
+    assert res_1234["value"] == 1234.0
+    assert res_1234["unit"] == "mm"
+    assert "1234.0 mm" in res_1234["result_pretty"]
+    assert "1.234 m" in res_1234["result_si"]
+
+    # 4. Output unit conversion: 1 m -> converted to mm should return 1000.0 mm
+    res_output = format_result(1.0, ureg.Quantity(1, ureg.meter), output_unit_str="mm")
+    assert res_output["value"] == 1000.0
+    assert res_output["unit"] == "mm"
+    assert "1000.0 mm" in res_output["result_pretty"]
+    assert "1.0 m" in res_output["result_si"]
+
+
+def test_offset_temperatures_parsing_and_conversion():
+    """Asserts that absolute/offset temperature units (degC, degF) parse and convert to kelvins successfully."""
+    # 1. 25 degC -> absolute Celsius temperature parses and converts to Kelvin base SI
+    q_c = parse_quantity("25 degC")
+    assert q_c.magnitude == 25
+    assert q_c.units == ureg.degree_Celsius
+    assert pytest.approx(q_c.to_base_units().magnitude) == 298.15
+
+    # 2. 25.5 degF -> absolute Fahrenheit temperature parses and converts to Kelvin base SI
+    q_f = parse_quantity("25.5 degF")
+    assert q_f.magnitude == 25.5
+    assert q_f.units == ureg.degree_Fahrenheit
+    assert pytest.approx(q_f.to_base_units().magnitude) == 269.5388888888889
+
+    # 3. delta temperature (delta_degC) still parses correctly as multiplicative unit
+    q_delta = parse_quantity("10 delta_degC")
+    assert q_delta.magnitude == 10
+    assert q_delta.units == ureg.delta_degree_Celsius
+    assert q_delta.to_base_units().magnitude == 10
+
+    # 4. Reconstruct absolute temperature conversions through format_result (25 degC -> K)
+    res_t1 = format_result(298.15, q_c, output_unit_str="K")
+    assert pytest.approx(res_t1["value"]) == 298.15
+    assert res_t1["unit"] == "K"
+    assert "298.15 K" in res_t1["result_pretty"]
+
+    # 5. Reconstruct absolute temperature without target unit (expected to preserve original unit degC)
+    res_t2 = format_result(298.15, q_c)
+    assert pytest.approx(res_t2["value"]) == 25.0
+    assert "C" in res_t2["unit"]
+    assert "25.0" in res_t2["result_pretty"]
