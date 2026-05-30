@@ -93,3 +93,30 @@ def test_nested_collection_serialization():
     assert "success" in serialized
     assert "42.0" in serialized
     assert "(1-1j)" in serialized
+
+
+def test_serialization_formatting_options():
+    """Asserts that precision rounding and scientific notation conversion format floats correctly."""
+    # 1. Standard float with precision
+    f_val = 3.14159265
+    res_prec = clean_object(f_val, precision=4)
+    assert res_prec == 3.1416
+
+    # 2. Standard float with scientific notation
+    res_sci = clean_object(f_val, scientific=True)
+    assert "3.14159" in res_sci
+
+    # 3. Standard float with both precision and scientific
+    res_both = clean_object(f_val, precision=3, scientific=True)
+    assert res_both == "3.142e+00"
+
+    # 4. Nested structures formatting
+    data = {
+        "mag": np.float64(0.000123456),
+        "vector": np.array([3.14159, 2.71828]),
+        "sym": sp.Float(1.23456)
+    }
+    cleaned = clean_object(data, precision=2, scientific=True)
+    assert cleaned["mag"] == "1.23e-04"
+    assert cleaned["vector"] == ["3.14e+00", "2.72e+00"]
+    assert cleaned["sym"] == "1.23e+00"

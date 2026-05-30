@@ -8,7 +8,7 @@ import ast
 from typing import Any, Dict, Optional, Set, Union
 import sympy as sp
 
-from core.errors import MathEvaluationError, format_error
+from core.errors import MathEvaluationError, MathSyntaxError, format_error
 from core.sandbox import run_sandboxed
 from core.namespace import SCIENCE_NAMESPACE
 
@@ -46,6 +46,34 @@ def extract_variables(expr_str: str) -> Set[str]:
             if name_id not in SCIENCE_NAMESPACE and not name_id.startswith("_"):
                 names.add(name_id)
     return names
+
+
+def parse_discrete_bound(value: Any, name: str):
+    """
+    Parses a boundary value for discrete operations (summation, product, convergence).
+    Validates that the boundary is not a float, and wraps syntax errors as MathSyntaxError.
+    """
+    # Normalize common string representations of infinity
+    if isinstance(value, str):
+        val_lower = value.strip().lower()
+        if val_lower in ("oo", "inf", "infinity"):
+            return sp.oo
+        if val_lower in ("-oo", "-inf", "-infinity"):
+            return -sp.oo
+
+    try:
+        bound = sp.sympify(value)
+    except Exception as exc:
+        raise MathSyntaxError(
+            f"{name} bound has invalid syntax: {value!r}"
+        ) from exc
+
+    if bound.is_Float:
+        raise MathEvaluationError(
+            f"{name} bound must be an integer, infinity, or symbolic expression; got float {value!r}."
+        )
+
+    return bound
 
 
 def solve_symbolic_tool(
@@ -152,8 +180,8 @@ def solve_symbolic_tool(
             bounds = extra.get("bounds", None) if extra else None
             if not bounds or not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
                 raise MathEvaluationError("Summation bounds must be a list containing [lower, upper].")
-            lower = sp.sympify(bounds[0])
-            upper = sp.sympify(bounds[1])
+            lower = parse_discrete_bound(bounds[0], "Lower")
+            upper = parse_discrete_bound(bounds[1], "Upper")
             res = sp.summation(lhs_sym, (target_var_sym, lower, upper))
             try:
                 res = sp.simplify(res)
@@ -164,8 +192,8 @@ def solve_symbolic_tool(
             bounds = extra.get("bounds", None) if extra else None
             if not bounds or not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
                 raise MathEvaluationError("Product bounds must be a list containing [lower, upper].")
-            lower = sp.sympify(bounds[0])
-            upper = sp.sympify(bounds[1])
+            lower = parse_discrete_bound(bounds[0], "Lower")
+            upper = parse_discrete_bound(bounds[1], "Upper")
             
             if upper == sp.oo:
                 try:
@@ -189,8 +217,8 @@ def solve_symbolic_tool(
         elif op == "convergence":
             bounds = extra.get("bounds", None) if extra else None
             if bounds and isinstance(bounds, (list, tuple)) and len(bounds) == 2:
-                lower = sp.sympify(bounds[0])
-                upper = sp.sympify(bounds[1])
+                lower = parse_discrete_bound(bounds[0], "Lower")
+                upper = parse_discrete_bound(bounds[1], "Upper")
                 sum_obj = sp.Sum(lhs_sym, (target_var_sym, lower, upper))
                 res = sum_obj.is_convergent()
             else:

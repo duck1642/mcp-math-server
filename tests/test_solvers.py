@@ -184,11 +184,24 @@ def test_symbolic_solver_edge_cases():
     assert res_syntax["status"] == "error"
     assert res_syntax["type"] == "MathSyntaxError"
 
-    # 3. SymPy PolynomialError on invalid non-integer bounds -> MathEvaluationError (Tier 1)
+    # 3. Float bounds validation -> MathEvaluationError (Tier 1)
     res_poly_err = solve_symbolic_tool("1/n**2", "summation", "n", extra={"bounds": [1.5, "oo"]})
     assert res_poly_err["status"] == "error"
     assert res_poly_err["type"] == "MathEvaluationError"
     assert res_poly_err["tier"] == 1
+    assert "must be an integer, infinity, or symbolic expression" in res_poly_err["message"]
+
+    # 3b. Malformed bound syntax -> MathSyntaxError (Tier 1)
+    res_bound_syntax = solve_symbolic_tool("1/n**2", "summation", "n", extra={"bounds": ["bad_lower(", "oo"]})
+    assert res_bound_syntax["status"] == "error"
+    assert res_bound_syntax["type"] == "MathSyntaxError"
+    assert res_bound_syntax["tier"] == 1
+
+    # 3c. Valid symbolic bound "bad_lower" -> Success, lerchphi(...)
+    res_symbolic_bound = solve_symbolic_tool("1/n**2", "summation", "n", extra={"bounds": ["bad_lower", "oo"]})
+    assert res_symbolic_bound["status"] == "success"
+    assert "lerchphi" in res_symbolic_bound["result_plain"]
+    assert "bad_lower" in res_symbolic_bound["result_plain"]
 
     # 4. factorial(n)/n**n convergence -> True
     res_conv_factorial = solve_symbolic_tool("factorial(n)/n**n", "convergence", "n", extra={"bounds": [1, "oo"]})

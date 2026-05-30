@@ -25,7 +25,9 @@ def calculate(
     expression: str,
     substitutions: Optional[Dict[str, Any]] = None,
     use_units: bool = False,
-    output_unit: Optional[str] = None
+    output_unit: Optional[str] = None,
+    precision: Optional[int] = None,
+    scientific: bool = False
 ) -> str:
     """
     Evaluates a numerical expression inside a safe sandbox with optional physical unit validation.
@@ -35,6 +37,8 @@ def calculate(
         substitutions: Map of variables to physical values/units (e.g. {'F': '500 N', 'L': '2 m'}).
         use_units: Set True to enable Pint unit verification and dimensional consistency checking.
         output_unit: Target physical unit for conversion of the result (e.g. 'kJ' or 'mm').
+        precision: Optional decimal precision rounding for numerical float outputs.
+        scientific: Set True to format numerical float outputs in scientific notation string.
     """
     res = calculate_tool(
         expression=expression,
@@ -43,7 +47,7 @@ def calculate(
         output_unit=output_unit
     )
     # Enforce utf-8 compliance and prevent mojibakes
-    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
+    return json.dumps(clean_object(res, precision=precision, scientific=scientific), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -55,7 +59,10 @@ def solve_symbolic(
     ],
     variable: str,
     domain: Literal["real", "complex"] = "complex",
-    extra: Optional[Dict[str, Any]] = None
+    extra: Optional[Dict[str, Any]] = None,
+    precision: Optional[int] = None,
+    scientific: bool = False,
+    latex: bool = True
 ) -> str:
     """
     Performs symbolic algebra, derivatives, integrations, simplifications, and limits using SymPy.
@@ -66,6 +73,9 @@ def solve_symbolic(
         variable: Target dependent symbol variable name (e.g. 'x').
         domain: Mathematical domain assumption mapping ('real' or 'complex').
         extra: Parameters such as {'order': 2} for derivatives or {'bounds': [0, 1]} for definite integrals.
+        precision: Optional decimal precision rounding for floating-point terms.
+        scientific: Set True to format numerical float terms in scientific notation string.
+        latex: Set False to omit generating the LaTeX string representation in the output.
     """
     res = solve_symbolic_tool(
         expression=expression,
@@ -74,7 +84,9 @@ def solve_symbolic(
         domain=domain,
         extra=extra
     )
-    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
+    if not latex and isinstance(res, dict) and "result_latex" in res:
+        res.pop("result_latex")
+    return json.dumps(clean_object(res, precision=precision, scientific=scientific), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -88,7 +100,9 @@ def solve_numeric(
     t_span: Optional[List[float]] = None,
     initial: Optional[List[float]] = None,
     substitutions: Optional[Dict[str, Any]] = None,
-    use_units: bool = False
+    use_units: bool = False,
+    precision: Optional[int] = None,
+    scientific: bool = False
 ) -> str:
     """
     High-precision numerical equation solvers, optimizations, integrations, and ODE solvers via SciPy.
@@ -104,6 +118,8 @@ def solve_numeric(
         initial: Target initial conditions guess coordinate vector.
         substitutions: Constant mapping variables to physical values/units.
         use_units: Set True to apply physical unit conversions.
+        precision: Optional decimal precision rounding for numerical float outputs.
+        scientific: Set True to format numerical float outputs in scientific notation string.
     """
     res = solve_numeric_tool(
         method=method,
@@ -117,7 +133,7 @@ def solve_numeric(
         substitutions=substitutions,
         use_units=use_units
     )
-    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
+    return json.dumps(clean_object(res, precision=precision, scientific=scientific), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
