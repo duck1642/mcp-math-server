@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-tests/test_plots.py - Automated tests for the thread-safe in-memory plotting engine.
-Asserts that mathematical curves and coordinate data generate valid inline SVGs.
+tests/test_plots.py - Automated tests for the sandboxed plotting tool.
+Asserts that mathematical curves and coordinate data produce valid self-contained matplotlib code.
 """
 
 import pytest
 from tools.plot import plot_tool
 
 def test_plot_expression_mode():
-    """Asserts that analytical expression curves render to Base64 SVG Data URLs."""
+    """Asserts that analytical expression curves produce valid matplotlib code."""
     res = plot_tool(
         mode="expression",
         expression="sin(x)",
@@ -20,13 +20,16 @@ def test_plot_expression_mode():
     )
     assert res["status"] == "success"
     assert res["mode"] == "expression"
-    # Ensure it generated inline markdown and data URL
-    assert "data:image/svg+xml;base64," in res["data_url"]
-    assert "![plot]" in res["image_tag"]
+    assert "code" in res
+    # Verify the generated code contains key matplotlib directives
+    assert "plt.show()" in res["code"]
+    assert "np.linspace" in res["code"]
+    assert "sin(x)" in res["code"]
+    assert "Sine Wave" in res["code"]
 
 
 def test_plot_data_mode():
-    """Asserts that raw coordinate arrays render correctly to Base64 SVG Data URLs."""
+    """Asserts that raw coordinate arrays produce valid matplotlib code."""
     res = plot_tool(
         mode="data",
         x=[0, 1, 2, 3],
@@ -37,7 +40,27 @@ def test_plot_data_mode():
     )
     assert res["status"] == "success"
     assert res["mode"] == "data"
-    assert "data:image/svg+xml;base64," in res["data_url"]
+    assert "code" in res
+    # Verify the generated code embeds data and plot directives
+    assert "plt.show()" in res["code"]
+    assert "Square Trend" in res["code"]
+    assert "0.0, 1.0, 2.0, 3.0" in res["code"]
+
+
+def test_plot_image_output():
+    """Asserts that the plot tool produces valid Base64 PNG data URLs when output_format is set to image."""
+    res = plot_tool(
+        mode="expression",
+        expression="cos(x)",
+        variable="x",
+        range=[-3.14, 3.14, 50],
+        title="Cosine",
+        output_format="image"
+    )
+    assert res["status"] == "success"
+    assert "data_url" in res
+    assert "image_tag" in res
+    assert "data:image/png;base64," in res["data_url"]
     assert "![plot]" in res["image_tag"]
 
 

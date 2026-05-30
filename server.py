@@ -5,8 +5,8 @@ Initializes FastMCP application and registers sandboxed math computational tools
 """
 
 import json
-from typing import Any, Dict, List, Optional, Union
 import base64
+from typing import Any, Dict, List, Optional, Union
 from mcp.server.fastmcp import FastMCP, Image
 
 # Import underlying computational engines
@@ -15,6 +15,7 @@ from tools.solve_symbolic import solve_symbolic_tool
 from tools.solve_numeric import solve_numeric_tool
 from tools.check_units import check_units_tool
 from tools.plot import plot_tool
+from core.serialization import clean_object
 
 # Initialize the FastMCP Math Server
 mcp = FastMCP("mcp-math-server")
@@ -42,7 +43,7 @@ def calculate(
         output_unit=output_unit
     )
     # Enforce utf-8 compliance and prevent mojibakes
-    return json.dumps(res, indent=2, ensure_ascii=False)
+    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -70,7 +71,7 @@ def solve_symbolic(
         domain=domain,
         extra=extra
     )
-    return json.dumps(res, indent=2, ensure_ascii=False)
+    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -113,7 +114,7 @@ def solve_numeric(
         substitutions=substitutions,
         use_units=use_units
     )
-    return json.dumps(res, indent=2, ensure_ascii=False)
+    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -135,7 +136,7 @@ def check_units(
         check=check,
         expression=expression
     )
-    return json.dumps(res, indent=2, ensure_ascii=False)
+    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -149,9 +150,9 @@ def plot(
     title: Optional[str] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None
-) -> Image:
+) -> str:
     """
-    Generates dynamic graphic curves or coordinate array plots in memory, returning an MCP Image.
+    Evaluates a mathematical expression inside the sandbox and returns self-contained matplotlib code for rendering.
     
     Args:
         mode: Plotting source ('expression' for analytic formulas, 'data' for coordinate arrays).
@@ -173,19 +174,76 @@ def plot(
         range=range,
         title=title,
         xlabel=xlabel,
-        ylabel=ylabel
+        ylabel=ylabel,
+        output_format="code"
+    )
+    return json.dumps(clean_object(res), indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+def plot_image(
+    mode: str,
+    expression: Optional[str] = None,
+    x: Optional[List[Any]] = None,
+    y: Optional[List[Any]] = None,
+    variable: Optional[str] = None,
+    range: Optional[List[float]] = None,
+    title: Optional[str] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None
+) -> Image:
+    """
+    [EXPERIMENT/TEST FEATURE] Generates dynamic graphic curves or coordinate arrays in memory, returning an MCP Image object.
+    
+    Args:
+        mode: Plotting source ('expression' for analytic formulas, 'data' for coordinate arrays).
+        expression: Analytical curve equation string to compute (e.g. 'sin(x)').
+        x: X-coordinate numerical data list (required for 'data' mode).
+        y: Y-coordinate numerical data list (required for 'data' mode).
+        variable: Independent curve coordinate symbol string (required for 'expression' mode).
+        range: Bound interval range [min, max] or [min, max, points] (required for 'expression' mode).
+        title: Optional title label for the graphic.
+        xlabel: Optional X-axis coordinate label.
+        ylabel: Optional Y-axis coordinate label.
+    """
+    res = plot_tool(
+        mode=mode,
+        expression=expression,
+        x=x,
+        y=y,
+        variable=variable,
+        range=range,
+        title=title,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        output_format="image"
     )
     
     if res["status"] == "error":
-        raise ValueError(res.get("message", "An error occurred during plotting."))
+        raise ValueError(res.get("message", "An error occurred during plot image generation."))
         
-    # Decode Base64 SVG data back to raw bytes for standard MCP Image content formatting
     b64_data = res["data_url"].split(",")[1]
-    svg_bytes = base64.b64decode(b64_data)
+    png_bytes = base64.b64decode(b64_data)
     
-    return Image(data=svg_bytes, format="svg")
+    return Image(data=png_bytes, format="png")
 
 
 if __name__ == "__main__":
-    # Launch standard FastMCP runner
-    mcp.run()
+    import os
+    import sys
+    from mcp.server.transport_security import TransportSecuritySettings
+    
+    # Launch in SSE mode if --http, --sse, or HTTP_PORT is specified
+    if "--http" in sys.argv or "--sse" in sys.argv or "HTTP_PORT" in os.environ:
+        port = int(os.environ.get("HTTP_PORT", 8080))
+        # Update settings port dynamically for FastMCP
+        mcp.settings.port = port
+        # Disable DNS rebinding protection for public tunneling compatibility
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        )
+        # Use sse transport for network compatibility
+        mcp.run(transport="sse")
+    else:
+        # Default to standard stdio for local clients
+        mcp.run()

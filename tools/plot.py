@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-tools/plot.py - Thread-safe in-memory Matplotlib plotting tool.
-Renders analytical curves or numerical data arrays into SVGs, returning base64 markdown links.
+tools/plot.py - Sandboxed plotting tool.
+Evaluates mathematical expressions safely and returns either self-contained matplotlib code
+or a Base64-encoded PNG image for universal/direct client testing.
 """
 
-import io
-import base64
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import sympy as sp
+import io
+import base64
 
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+# Enforce headless Matplotlib backend prior to import
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from core.errors import MathEvaluationError, format_error
 from core.sandbox import run_sandboxed
@@ -25,16 +28,17 @@ def plot_tool(
     range: Optional[List[float]] = None,
     title: Optional[str] = None,
     xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None
+    ylabel: Optional[str] = None,
+    output_format: str = "code"
 ) -> Dict[str, Any]:
     """
-    Renders high-quality graphical plots directly inside computer memory.
-    Returns standard Base64-encoded SVG Data URLs formatted as inline Markdown images.
+    Evaluates plot data safely inside the AST sandbox.
+    Can return self-contained matplotlib code ('code') or a Base64 PNG ('image').
     """
     try:
         plot_mode = mode.lower().strip()
         
-        # 1. EVALUATE COORDINATE SERIES
+        # 1. EVALUATE AND VALIDATE COORDINATE SERIES
         if plot_mode == "expression":
             if not expression:
                 raise MathEvaluationError("Missing expression string for 'expression' plot mode.")
@@ -54,7 +58,7 @@ def plot_tool(
             # Create linspace domain array
             x_vals = np.linspace(lower_lim, upper_lim, points_count)
             
-            # Walk and compile mathematical function in AST sandbox
+            # Walk and compile mathematical function in AST sandbox (validation)
             var_sym = sp.Symbol(variable)
             ast_obj = run_sandboxed(expression, local_dict={variable: var_sym})
             sym_expr = sp.sympify(ast_obj)
@@ -97,46 +101,97 @@ def plot_tool(
                 suggestion="Use 'expression' (for plotting mathematical functions) or 'data' (for plotting arrays)."
             )
             
-        # 2. THREAD-SAFE OBJECT-ORIENTED DRAWING
-        fig = Figure(figsize=(7, 4.5), dpi=100)
-        canvas = FigureCanvas(fig)
-        ax = fig.add_subplot(111)
-        
-        # Style layout using elegant dark theme markers
-        ax.plot(x_vals, y_vals, color="#3b82f6", linewidth=2, label=expression if expression else "Data Curve")
-        
-        # Apply labels and titles
-        if title:
-            ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
-        if xlabel:
-            ax.set_xlabel(xlabel, fontsize=10, labelpad=8)
-        if ylabel:
-            ax.set_ylabel(ylabel, fontsize=10, labelpad=8)
+        # 2. GENERATE AND FORMAT OUTPUT
+        if output_format == "image":
+            # Direct Image Generation
+            fig, ax = plt.subplots(figsize=(7, 4.5))
+            label = expression if expression else "Data Curve"
             
-        ax.grid(True, linestyle="--", alpha=0.5, color="#d1d5db")
-        ax.tick_params(colors="#4b5563")
-        
-        # Apply aesthetic boundary tweaks
-        fig.tight_layout()
-        
-        # 3. WRITE TO IN-MEMORY STRING BUFFER & BASE64 ENCODE
-        img_buffer = io.BytesIO()
-        try:
-            fig.savefig(img_buffer, format="svg", bbox_inches="tight")
-            img_buffer.seek(0)
-            # Encode explicitly to utf-8 safe base64
-            b64_data = base64.b64encode(img_buffer.read()).decode("utf-8")
-        finally:
-            img_buffer.close()
+            plot_var = x_vals if (plot_mode == "expression" and variable) else x_vals
+            ax.plot(plot_var, y_vals, color='#3b82f6', linewidth=2, label=label)
             
-        inline_markdown = f"![plot](data:image/svg+xml;base64,{b64_data})"
-        
-        return {
-            "status": "success",
-            "mode": plot_mode,
-            "image_tag": inline_markdown,
-            "data_url": f"data:image/svg+xml;base64,{b64_data}"
-        }
-        
+            if title:
+                ax.set_title(title, fontsize=12, fontweight='bold')
+            if xlabel:
+                ax.set_xlabel(xlabel, fontsize=10)
+            if ylabel:
+                ax.set_ylabel(ylabel, fontsize=10)
+                
+            ax.grid(True, linestyle='--', alpha=0.5, color='#d1d5db')
+            ax.legend()
+            fig.tight_layout()
+            
+            img_buffer = io.BytesIO()
+            try:
+                fig.savefig(img_buffer, format="png", bbox_inches="tight")
+                img_buffer.seek(0)
+                img_base64 = base64.b64encode(img_buffer.getvalue()).decode("ascii")
+                data_url = f"data:image/png;base64,{img_base64}"
+                image_tag = f"![plot]({data_url})"
+            finally:
+                plt.close(fig)
+                
+            return {
+                "status": "success",
+                "mode": plot_mode,
+                "data_url": data_url,
+                "image_tag": image_tag
+            }
+            
+        else:
+            # Self-contained code output (default)
+            label = expression if expression else "Data Curve"
+            
+            code_lines = [
+                "import numpy as np",
+                "from numpy import *",
+                "import matplotlib.pyplot as plt",
+                "E = e  # Euler's number alias",
+                "",
+            ]
+            
+            if plot_mode == "expression":
+                code_lines.extend([
+                    f"{variable} = np.linspace({lower_lim}, {upper_lim}, {points_count})",
+                    f"y = {expression}",
+                ])
+            else:
+                x_rounded = [round(v, 6) for v in x_vals.tolist()]
+                y_rounded = [round(v, 6) for v in y_vals.tolist()]
+                code_lines.extend([
+                    f"x = {x_rounded}",
+                    f"y = {y_rounded}",
+                ])
+            
+            plot_var = variable if (plot_mode == "expression" and variable) else "x"
+            
+            code_lines.extend([
+                "",
+                "fig, ax = plt.subplots(figsize=(7, 4.5))",
+                f"ax.plot({plot_var}, y, color='#3b82f6', linewidth=2, label={repr(label)})",
+            ])
+            
+            if title:
+                code_lines.append(f"ax.set_title({repr(title)}, fontsize=12, fontweight='bold')")
+            if xlabel:
+                code_lines.append(f"ax.set_xlabel({repr(xlabel)}, fontsize=10)")
+            if ylabel:
+                code_lines.append(f"ax.set_ylabel({repr(ylabel)}, fontsize=10)")
+            
+            code_lines.extend([
+                "ax.grid(True, linestyle='--', alpha=0.5, color='#d1d5db')",
+                "ax.legend()",
+                "fig.tight_layout()",
+                "plt.show()",
+            ])
+            
+            code = "\n".join(code_lines)
+            
+            return {
+                "status": "success",
+                "mode": plot_mode,
+                "code": code
+            }
+            
     except Exception as e:
         return format_error(e)
