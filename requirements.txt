@@ -1,0 +1,6 @@
+mcp
+sympy
+numpy
+scipy
+pint
+matplotlib
