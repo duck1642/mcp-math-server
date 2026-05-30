@@ -126,3 +126,36 @@ def test_dynamical_ode_systems():
     
     # Assert final trajectory value is exp(-2)
     assert abs(y_values[-1] - 0.135335) < 1e-3
+
+
+def test_symbolic_sequences_and_series():
+    """Asserts that symbolic series, summations, products, sequence limits, and convergence tests calculate correctly."""
+    # 1. series: expansion of cos(x) around 0 up to order 4
+    res_series = solve_symbolic_tool("cos(x)", "series", "x", extra={"point": 0, "order": 4})
+    assert res_series["status"] == "success"
+    assert "O(x**4)" in res_series["result_plain"] or "O(x**4" in res_series["result_plain"]
+
+    # 2. summation: Sum of 1/n**2 from 1 to oo -> pi**2/6
+    res_sum = solve_symbolic_tool("1/n**2", "summation", "n", extra={"bounds": [1, "oo"]})
+    assert res_sum["status"] == "success"
+    assert "pi**2/6" in res_sum["result_plain"]
+
+    # 3. product: Product of (1 + 1/n) from 1 to 3 -> 4
+    res_prod = solve_symbolic_tool("1 + 1/n", "product", "n", extra={"bounds": [1, 3]})
+    assert res_prod["status"] == "success"
+    assert res_prod["result_plain"] == "4"
+
+    # 4. sequence_limit: Limit of (n + 1)/n as n -> oo is 1
+    res_seq_lim = solve_symbolic_tool("(n + 1)/n", "sequence_limit", "n")
+    assert res_seq_lim["status"] == "success"
+    assert res_seq_lim["result_plain"] == "1"
+
+    # 5. convergence: Sum(1/n**2, (n, 1, oo)) is convergent (True)
+    res_conv1 = solve_symbolic_tool("1/n**2", "convergence", "n", extra={"bounds": [1, "oo"]})
+    assert res_conv1["status"] == "success"
+    assert res_conv1["result_plain"] == "True"
+
+    # 6. convergence: Sum(1/n, (n, 1, oo)) is divergent (False)
+    res_conv2 = solve_symbolic_tool("1/n", "convergence", "n", extra={"bounds": [1, "oo"]})
+    assert res_conv2["status"] == "success"
+    assert res_conv2["result_plain"] == "False"

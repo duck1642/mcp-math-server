@@ -6,7 +6,7 @@ Initializes FastMCP application and registers sandboxed math computational tools
 
 import json
 import base64
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from mcp.server.fastmcp import FastMCP, Image
 
 # Import underlying computational engines
@@ -49,9 +49,12 @@ def calculate(
 @mcp.tool()
 def solve_symbolic(
     expression: str,
-    operation: str,
+    operation: Literal[
+        "solve", "simplify", "expand", "diff", "integrate", "limit",
+        "series", "summation", "product", "sequence_limit", "convergence"
+    ],
     variable: str,
-    domain: str = "complex",
+    domain: Literal["real", "complex"] = "complex",
     extra: Optional[Dict[str, Any]] = None
 ) -> str:
     """
@@ -59,7 +62,7 @@ def solve_symbolic(
     
     Args:
         expression: Algebraic equation or expression string to analyze (e.g. 'x**2 - 4 = 0' or 'x*sin(x)').
-        operation: Symbolic algorithm to run ('solve', 'simplify', 'expand', 'diff', 'integrate', 'limit').
+        operation: Symbolic algorithm to run ('solve', 'simplify', 'expand', 'diff', 'integrate', 'limit', 'series', 'summation', 'product', 'sequence_limit', 'convergence').
         variable: Target dependent symbol variable name (e.g. 'x').
         domain: Mathematical domain assumption mapping ('real' or 'complex').
         extra: Parameters such as {'order': 2} for derivatives or {'bounds': [0, 1]} for definite integrals.
@@ -76,7 +79,7 @@ def solve_symbolic(
 
 @mcp.tool()
 def solve_numeric(
-    method: str,
+    method: Literal["root", "minimize", "integrate", "ode"],
     expression: Optional[Union[str, List[str]]] = None,
     equations: Optional[Union[str, List[str]]] = None,
     variable: Optional[Union[str, List[str]]] = None,
@@ -141,7 +144,7 @@ def check_units(
 
 @mcp.tool()
 def plot(
-    mode: str,
+    mode: Literal["expression", "data"],
     expression: Optional[str] = None,
     x: Optional[List[Any]] = None,
     y: Optional[List[Any]] = None,
@@ -182,7 +185,7 @@ def plot(
 
 @mcp.tool()
 def plot_image(
-    mode: str,
+    mode: Literal["expression", "data"],
     expression: Optional[str] = None,
     x: Optional[List[Any]] = None,
     y: Optional[List[Any]] = None,

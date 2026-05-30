@@ -132,10 +132,46 @@ def solve_symbolic_tool(
             direction = extra.get("dir", "+") if extra else "+"
             res = sp.limit(lhs_sym, target_var_sym, point_sym, dir=direction)
             
+        elif op == "series":
+            point = extra.get("point", 0) if extra else 0
+            order = int(extra.get("order", 6)) if extra else 6
+            point_sym = sp.sympify(point)
+            res = sp.series(lhs_sym, target_var_sym, point_sym, order)
+            
+        elif op == "summation":
+            bounds = extra.get("bounds", None) if extra else None
+            if not bounds or not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
+                raise MathEvaluationError("Summation bounds must be a list containing [lower, upper].")
+            lower = sp.sympify(bounds[0])
+            upper = sp.sympify(bounds[1])
+            res = sp.summation(lhs_sym, (target_var_sym, lower, upper))
+            
+        elif op == "product":
+            bounds = extra.get("bounds", None) if extra else None
+            if not bounds or not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
+                raise MathEvaluationError("Product bounds must be a list containing [lower, upper].")
+            lower = sp.sympify(bounds[0])
+            upper = sp.sympify(bounds[1])
+            res = sp.product(lhs_sym, (target_var_sym, lower, upper))
+            
+        elif op == "sequence_limit":
+            res = sp.limit(lhs_sym, target_var_sym, sp.oo)
+            
+        elif op == "convergence":
+            bounds = extra.get("bounds", None) if extra else None
+            if bounds and isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+                lower = sp.sympify(bounds[0])
+                upper = sp.sympify(bounds[1])
+                sum_obj = sp.Sum(lhs_sym, (target_var_sym, lower, upper))
+                res = sum_obj.is_convergent()
+            else:
+                sum_obj = sp.Sum(lhs_sym, (target_var_sym, 1, sp.oo))
+                res = sum_obj.is_convergent()
+            
         else:
             raise MathEvaluationError(
                 f"Unsupported symbolic operation '{operation}'.",
-                suggestion="Use one of the whitelisted operations: 'solve', 'simplify', 'expand', 'diff', 'integrate', 'limit'."
+                suggestion="Use one of the whitelisted operations: 'solve', 'simplify', 'expand', 'diff', 'integrate', 'limit', 'series', 'summation', 'product', 'sequence_limit', 'convergence'."
             )
             
         # 5. Format and serialize output
