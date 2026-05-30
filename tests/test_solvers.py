@@ -145,6 +145,16 @@ def test_symbolic_sequences_and_series():
     assert res_prod["status"] == "success"
     assert res_prod["result_plain"] == "4"
 
+    # 3b. product: Product of (n + 1)/n from 1 to k -> k + 1 (simplified)
+    res_prod_simp = solve_symbolic_tool("(n + 1)/n", "product", "n", extra={"bounds": [1, "k"]})
+    assert res_prod_simp["status"] == "success"
+    assert res_prod_simp["result_plain"] == "k + 1"
+
+    # 3c. product: Infinite Product of 1 - 1/n**2 from 2 to oo -> 1/2 (fully evaluated)
+    res_prod_inf = solve_symbolic_tool("1 - 1/n**2", "product", "n", extra={"bounds": [2, "oo"]})
+    assert res_prod_inf["status"] == "success"
+    assert res_prod_inf["result_plain"] == "1/2"
+
     # 4. sequence_limit: Limit of (n + 1)/n as n -> oo is 1
     res_seq_lim = solve_symbolic_tool("(n + 1)/n", "sequence_limit", "n")
     assert res_seq_lim["status"] == "success"
@@ -159,3 +169,41 @@ def test_symbolic_sequences_and_series():
     res_conv2 = solve_symbolic_tool("1/n", "convergence", "n", extra={"bounds": [1, "oo"]})
     assert res_conv2["status"] == "success"
     assert res_conv2["result_plain"] == "False"
+
+
+def test_symbolic_solver_edge_cases():
+    """Asserts that math/solver edge cases, malformed variables, syntax errors, and library errors fail gracefully."""
+    # 1. Empty variable name -> MathEvaluationError
+    res_empty_var = solve_symbolic_tool("1/n**2", "convergence", "", extra={"bounds": [1, "oo"]})
+    assert res_empty_var["status"] == "error"
+    assert res_empty_var["type"] == "MathEvaluationError"
+    assert "cannot be empty" in res_empty_var["message"]
+
+    # 2. Syntax error in expression (e.g., "sin(") -> MathSyntaxError
+    res_syntax = solve_symbolic_tool("sin(", "series", "x", extra={"point": 0, "order": 5})
+    assert res_syntax["status"] == "error"
+    assert res_syntax["type"] == "MathSyntaxError"
+
+    # 3. SymPy PolynomialError on invalid non-integer bounds -> MathEvaluationError (Tier 1)
+    res_poly_err = solve_symbolic_tool("1/n**2", "summation", "n", extra={"bounds": [1.5, "oo"]})
+    assert res_poly_err["status"] == "error"
+    assert res_poly_err["type"] == "MathEvaluationError"
+    assert res_poly_err["tier"] == 1
+
+    # 4. factorial(n)/n**n convergence -> True
+    res_conv_factorial = solve_symbolic_tool("factorial(n)/n**n", "convergence", "n", extra={"bounds": [1, "oo"]})
+    assert res_conv_factorial["status"] == "success"
+    assert res_conv_factorial["result_plain"] == "True"
+
+    # 5. Invalid syntax n!/n**n -> MathSyntaxError (prevents AST parser recursion loop)
+    res_syntax_factorial = solve_symbolic_tool("n!/n**n", "convergence", "n", extra={"bounds": [1, "oo"]})
+    assert res_syntax_factorial["status"] == "error"
+    assert res_syntax_factorial["type"] == "MathSyntaxError"
+
+    # 6. Direct RecursionError serialization test -> MathEvaluationError (Tier 1)
+    from core.errors import format_error
+    res_recurse = format_error(RecursionError("maximum recursion depth exceeded"))
+    assert res_recurse["status"] == "error"
+    assert res_recurse["type"] == "MathEvaluationError"
+    assert res_recurse["tier"] == 1
+    assert "recursion depth" in res_recurse["message"]

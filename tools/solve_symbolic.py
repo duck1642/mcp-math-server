@@ -28,11 +28,15 @@ def extract_variables(expr_str: str) -> Set[str]:
         tree = ast.parse(parse_target, mode="eval")
     except Exception:
         # Fallback split approach if AST parsing fails on assignments
-        parts = clean.split("=")
-        vars_found = set()
-        for p in parts:
-            vars_found.update(extract_variables(p))
-        return vars_found
+        if "=" in clean:
+            parts = clean.split("=")
+            vars_found = set()
+            for p in parts:
+                p_clean = p.strip()
+                if p_clean and p_clean != clean:
+                    vars_found.update(extract_variables(p_clean))
+            return vars_found
+        return set()
         
     names = set()
     for node in ast.walk(tree):
@@ -56,6 +60,12 @@ def solve_symbolic_tool(
     Handles equation pre-processing, domain specification, and latex output parsing.
     """
     try:
+        if not variable or not variable.strip():
+            raise MathEvaluationError(
+                "Variable name cannot be empty.",
+                suggestion="Provide a valid non-empty variable name (e.g., 'x', 'n')."
+            )
+
         # 1. Parse equations containing a single "=" assignment operator
         clean_expr = expression.strip()
         has_equals = "=" in clean_expr and "==" not in clean_expr
@@ -145,6 +155,10 @@ def solve_symbolic_tool(
             lower = sp.sympify(bounds[0])
             upper = sp.sympify(bounds[1])
             res = sp.summation(lhs_sym, (target_var_sym, lower, upper))
+            try:
+                res = sp.simplify(res)
+            except Exception:
+                pass
             
         elif op == "product":
             bounds = extra.get("bounds", None) if extra else None
@@ -152,7 +166,22 @@ def solve_symbolic_tool(
                 raise MathEvaluationError("Product bounds must be a list containing [lower, upper].")
             lower = sp.sympify(bounds[0])
             upper = sp.sympify(bounds[1])
-            res = sp.product(lhs_sym, (target_var_sym, lower, upper))
+            
+            if upper == sp.oo:
+                try:
+                    # Evaluate infinite product as the limit of a finite product
+                    _k = sp.Symbol("_k", integer=True, positive=True)
+                    res_finite = sp.product(lhs_sym, (target_var_sym, lower, _k))
+                    res_simp = sp.simplify(res_finite)
+                    res = sp.limit(res_simp, _k, sp.oo)
+                except Exception:
+                    res = sp.product(lhs_sym, (target_var_sym, lower, upper))
+            else:
+                res = sp.product(lhs_sym, (target_var_sym, lower, upper))
+                try:
+                    res = sp.simplify(res)
+                except Exception:
+                    pass
             
         elif op == "sequence_limit":
             res = sp.limit(lhs_sym, target_var_sym, sp.oo)

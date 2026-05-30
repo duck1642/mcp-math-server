@@ -79,6 +79,25 @@ def format_error(error: Exception, debug: bool = False) -> dict:
             "suggestion": "Check denominators or variables to prevent division by zero."
         }
     
+    if isinstance(error, RecursionError):
+        return {
+            "status": "error",
+            "tier": 1,
+            "type": "MathEvaluationError",
+            "message": f"Evaluation exceeded maximum recursion depth: {error}",
+            "suggestion": "Simplify the mathematical expression or reduce complex summations/products."
+        }
+        
+    error_module = getattr(type(error), "__module__", "")
+    if "sympy" in error_module:
+        return {
+            "status": "error",
+            "tier": 1,
+            "type": "MathEvaluationError",
+            "message": f"SymPy error: {error}",
+            "suggestion": "Ensure expression variables, bounds, or points are mathematically valid for this operation."
+        }
+    
     # Check for Pint dimensional errors dynamically if Pint is imported
     error_class_name = error.__class__.__name__
     if "DimensionalityError" in error_class_name:

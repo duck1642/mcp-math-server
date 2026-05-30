@@ -70,6 +70,8 @@ COMMON_MATH_GLOBALS = {
     "ln": sp.log,
     "exp": sp.exp,
     "sqrt": sp.sqrt,
+    "factorial": sp.factorial,
+    "gamma": sp.gamma,
 }
 
 # Merge all into the final namespace
