@@ -23,6 +23,8 @@ This document tracks the chronological history of changes, modifications, and mi
 *   **Test: Build Verification Suite**
     *   Created 19 test cases in `tests/test_sandbox.py`, `tests/test_units.py`, `tests/test_solvers.py`, and `tests/test_plots.py`.
     *   Executed automated pytest session confirming 100% success rate (19 passed in 9.29s).
+*   **Feat: Add mcp_config_template.json template**
+    *   Created `mcp_config_template.json` in the workspace root, containing full math server and Google Workspace MCP server configurations.
 *   **Feat: Add gitignore configuration**
     *   Created `.gitignore` to exclude python cache, pytest outputs, virtual environments, and system/IDE configurations.
 *   **Feat: Initialize progress tracking infrastructure**

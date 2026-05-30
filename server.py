@@ -6,7 +6,8 @@ Initializes FastMCP application and registers sandboxed math computational tools
 
 import json
 from typing import Any, Dict, List, Optional, Union
-from mcp.server.fastmcp import FastMCP
+import base64
+from mcp.server.fastmcp import FastMCP, Image
 
 # Import underlying computational engines
 from tools.calculate import calculate_tool
@@ -148,9 +149,9 @@ def plot(
     title: Optional[str] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None
-) -> str:
+) -> Image:
     """
-    Generates dynamic graphic curves or coordinate array plots in memory, returning Base64 SVG Markdown tags.
+    Generates dynamic graphic curves or coordinate array plots in memory, returning an MCP Image.
     
     Args:
         mode: Plotting source ('expression' for analytic formulas, 'data' for coordinate arrays).
@@ -174,7 +175,15 @@ def plot(
         xlabel=xlabel,
         ylabel=ylabel
     )
-    return json.dumps(res, indent=2, ensure_ascii=False)
+    
+    if res["status"] == "error":
+        raise ValueError(res.get("message", "An error occurred during plotting."))
+        
+    # Decode Base64 SVG data back to raw bytes for standard MCP Image content formatting
+    b64_data = res["data_url"].split(",")[1]
+    svg_bytes = base64.b64decode(b64_data)
+    
+    return Image(data=svg_bytes, format="svg")
 
 
 if __name__ == "__main__":
