@@ -1,6 +1,6 @@
 # MCP Math Server
 
-A local Model Context Protocol (MCP) server exposing scientific and symbolic math capabilities for engineering and physics workflows.
+An experimental local Model Context Protocol (MCP) server exposing scientific and symbolic math capabilities for engineering and physics workflows.
 
 ## Features
 - **Stateless Symbolic Algebra & Calculus:** SymPy-backed algebraic solver, integration, derivatives, and simplification.
