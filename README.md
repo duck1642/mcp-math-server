@@ -43,6 +43,19 @@ The source also contains an optional SSE/HTTP launch path for local experiments.
 | `plot` | Return self-contained Matplotlib plotting code. |
 | `plot_image` | Experimental: return an in-memory PNG as an MCP image. |
 
+## Input and output
+
+The server communicates with MCP clients over local `stdio` by default. Clients invoke tools with structured arguments. Most tools return their results as JSON-formatted text, while `plot_image` returns an in-memory PNG as an MCP image. The server does not read or write project files by default and does not persist state.
+
+| Tool | Input | Output |
+|---|---|---|
+| `calculate` | An expression with optional substitutions, units, and formatting options. | JSON-formatted calculation result. |
+| `solve_symbolic` | An expression, symbolic operation, and target variable. | JSON-formatted symbolic result, optionally including LaTeX. |
+| `solve_numeric` | A numerical method with equations, expressions, and solver parameters. | JSON-formatted numerical result. |
+| `check_units` | Quantities with optional compatibility checks or expressions. | JSON-formatted dimensional analysis report. |
+| `plot` | An expression or coordinate arrays with plotting options. | JSON-formatted text containing self-contained Matplotlib code. |
+| `plot_image` | The same plotting inputs as `plot`. | An in-memory PNG returned as an MCP image. |
+
 ## Testing
 
 ```text
