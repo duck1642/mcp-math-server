@@ -1,6 +1,6 @@
 # MCP Math Server — Technical Architecture Document
 
-> A memory-first, zero-filesystem-I/O local Model Context Protocol (MCP) server providing high-precision numerical, symbolic, and dimensional calculation tools for engineering workflows. Designed for integration with GPT Desktop Developer Mode, Gemini CLI, and Claude IDEs.
+> A memory-first, local Model Context Protocol (MCP) server providing numerical, symbolic, dimensional, and plotting tools for engineering workflows. The default transport is local `stdio`; an optional SSE/HTTP path is available for experiments.
 
 ---
 
@@ -8,16 +8,14 @@
 
 The MCP Math Server acts as a stateless, highly secure, mathematical co-processor for AI clients. The AI client handles reasoning and prompt formatting; this server provides exact numerical evaluation, symbolic manipulation, unit safety, and visualization.
 
-The design has been refined to enforce **absolute local security** and **stateless efficiency**:
+The design prioritizes **stateless execution** and a restricted expression-evaluation surface:
 
 1.  **Memory-First Execution Model (No "Noting"):**
     All note-taking and state-persistence capabilities (`save_note`, `load_note`, `list_notes` and `notes.json`) have been entirely stripped from the server. The AI client manages variable bindings and conversational state in its own context window. The server remains a stateless compute "skill."
-2.  **Zero-Filesystem-I/O Sandbox:**
-    The server does not read or write to the local filesystem. The Abstract Syntax Tree (AST) sandbox rejects all occurrences of filesystem access. Functions like `open()`, `write()`, and imports like `os`, `sys`, `pathlib`, or `shutil` are blocked at the parser level.
-3.  **In-Memory Plotting (Base64 SVG Data URLs):**
-    Rather than writing physical SVG files to local disk, Matplotlib draws plots directly into an in-memory string buffer (`io.StringIO`). This raw XML data is Base64 encoded and returned directly as a Data URL:
-    `data:image/svg+xml;base64,<data>`
-    Returned inside a Markdown image tag `![plot](data:...)`, it renders inline in supported markdown chats with **zero local disk footprint**.
+2.  **Restricted Expression Evaluation:**
+    Mathematical expressions are parsed and checked by an Abstract Syntax Tree (AST) allow-list. Imports, assignments, private attribute access, and non-whitelisted built-ins are rejected before evaluation.
+3.  **In-Memory Plotting:**
+    Plot data is rendered through Matplotlib without an application-level output file. The `plot` tool returns generated Python code; the experimental `plot_image` tool returns an in-memory PNG through MCP.
 
 ---
 
@@ -30,7 +28,7 @@ The mathematical core relies on standard, battle-tested Python scientific packag
 | `sympy` | Symbolic algebra, calculus, equation simplification |
 | `numpy` | High-performance numerical arrays and linear algebra |
 | `scipy` | Roots, minimization, definite integration, and ODE solvers |
-| `matplotlib` | Graphic plot generation (SVG render inside memory) |
+| `matplotlib` | Graphic plot generation (code or in-memory PNG) |
 | `pint` | Unit registration, dimensional checks, and SI conversion |
 | `cmath` / `math` | Scalar complex and basic mathematics |
 
@@ -67,13 +65,13 @@ To prevent arbitrary execution and system exploits, numerical expressions evalua
     *   No filesystem I/O (`open()`, `read()`, `write()` are blocked).
     *   No network sockets or system-level access.
 *   **Whitelisted Builtins:** `abs`, `round`, `len`, `range`, `zip`, `enumerate`, `min`, `max`, `sum`, `sorted`, `list`, `dict`, `tuple`, `bool`, `int`, `float`, `complex`, `str`.
-*   **Resource Constraints:** Max timeout of 10 seconds; memory limit constrained to 512 MB.
+*   **Resource Constraints:** The evaluator uses a default 10-second future timeout. There is currently no implemented memory cap, and the timeout is not a separate-process kill boundary.
 
 ---
 
 ## 4. Stateless Tool Surface
 
-The server exposes **5 stateless tools** via FastMCP:
+The server exposes **6 stateless tools** via FastMCP:
 
 ### 4.1 `calculate`
 Evaluates a sandboxed numerical expression using numpy, scipy, cmath, or math.
@@ -115,13 +113,18 @@ Explicit diagnostic tool for dimensional analysis and SI conversion.
 *   **Output:** Dimensional formulas (e.g., `[mass]/([length]*[time]^2)`) and compatibility report.
 
 ### 4.5 `plot`
-Renders dynamic graphics directly into memory, returning Base64 SVG Data URLs.
+Generates self-contained Matplotlib code for dynamic graphics.
 *   **Parameters:**
     *   `mode` (string, required): `"expression"` (computes over range) or `"data"` (uses direct array values).
     *   `expression` / `x` / `y` (string/list, required): Plotting targets.
     *   `variable` / `range` (string/list, required for expression mode).
     *   `title` / `xlabel` / `ylabel` (string, optional): Labels.
-*   **Output:** Base64-encoded SVG Data URL string formatted inside a Markdown image tag.
+*   **Output:** JSON containing generated Matplotlib code.
+
+### 4.6 `plot_image`
+Experimental image variant of the plotting tool. It uses the same expression/data inputs as `plot` and returns a PNG through the MCP `Image` type.
+
+*   **Output:** In-memory PNG image.
 
 ---
 

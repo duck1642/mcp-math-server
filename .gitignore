@@ -29,3 +29,10 @@ env/
 # System files
 Thumbs.db
 Desktop.ini
+
+# Local analysis artifacts
+graphify-out/
+docs/status.md
+docs/roadmap.md
+docs/LOCAL_CODE_AUDIT.md
+docs/architecture.md

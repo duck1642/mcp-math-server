@@ -3,7 +3,7 @@
     "mcp-math-server": {
       "command": "python",
       "args": [
-        "f:/ARCHIVE/main/software/python/projects/mcp-math-server/server.py"
+        "path/to/mcp-math-server/server.py"
       ],
       "env": {
         "PYTHONUTF8": "1"
